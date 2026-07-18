@@ -8,6 +8,7 @@ Run: streamlit run app.py
 """
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import sys
@@ -47,6 +48,46 @@ _DECISION_LABELS = {
 }
 
 st.set_page_config(page_title="Contract review pilot", page_icon=":material/fact_check:", layout="wide")
+
+
+def _require_login() -> None:
+    """Gate the whole app behind a single username/password.
+
+    Credentials come from secrets/env (APP_USERNAME / APP_PASSWORD, bridged
+    from st.secrets above), never hardcoded here -- so the password stays out
+    of the public repo. hmac.compare_digest avoids leaking the answer via
+    comparison timing. Called before anything else renders; on failure it
+    draws the sign-in form and st.stop()s the rest of the script.
+    """
+    if st.session_state.get("authenticated"):
+        return
+
+    expected_user = os.environ.get("APP_USERNAME", "")
+    expected_pw = os.environ.get("APP_PASSWORD", "")
+
+    st.title(":material/lock: Sign in")
+    st.caption("Contract review pilot -- authorized users only.")
+    with st.form("login_form"):
+        username = st.text_input("Username", autocomplete="username")
+        password = st.text_input("Password", type="password", autocomplete="current-password")
+        submitted = st.form_submit_button("Sign in", type="primary", icon=":material/login:")
+
+    if submitted:
+        if not expected_user or not expected_pw:
+            st.error(
+                "Login is not configured -- add APP_USERNAME and APP_PASSWORD to the "
+                "app secrets.",
+                icon=":material/error:",
+            )
+        elif hmac.compare_digest(username, expected_user) and hmac.compare_digest(password, expected_pw):
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Invalid username or password.", icon=":material/error:")
+    st.stop()
+
+
+_require_login()
 
 
 def _run_analysis_on_bytes(name: str, content: bytes) -> GapReport:
@@ -171,6 +212,10 @@ st.caption(
 )
 
 with st.sidebar:
+    if st.button("Sign out", icon=":material/logout:"):
+        st.session_state.clear()
+        st.rerun()
+
     st.header(":material/upload_file: 1. Choose a contract")
     sample_files = sorted(p.name for p in _SAMPLE_CONTRACTS_DIR.glob("*.md")) if _SAMPLE_CONTRACTS_DIR.exists() else []
     sample_choice = st.selectbox("Sample synthetic contract", ["-- none --", *sample_files])
