@@ -1,0 +1,15 @@
+.env
+# Real service secrets for Streamlit Community Cloud -- pasted into the Cloud
+# secrets UI, NEVER committed. .streamlit/config.toml (the theme) IS committed.
+.streamlit/secrets.toml
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.DS_Store
+*.report.json
+reports/
+# Local Claude Code tooling / skills -- not part of the app.
+.claude/
+.agents/

@@ -1,0 +1,13 @@
+azure-ai-documentintelligence>=1.0.0
+azure-search-documents>=11.5.0
+openai>=1.40.0
+azure-identity>=1.17.0
+azure-storage-blob>=12.20.0
+azure-keyvault-secrets>=4.8.0
+pydantic>=2.7.0
+tiktoken>=0.7.0
+python-dotenv>=1.0.0
+pandas>=2.2.0
+markdown>=3.6
+streamlit>=1.38.0
+pypdf>=5.0.0

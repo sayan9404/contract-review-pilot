@@ -1,0 +1,6 @@
+{
+  "max_tokens": 512,
+  "overlap_pct": 25,
+  "respect_sentence_boundaries": true,
+  "keep_tables_intact": true
+}

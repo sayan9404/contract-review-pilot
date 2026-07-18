@@ -1,0 +1,81 @@
+{
+  "contract_A_acme_msa_2026": {
+    "file": "data/synthetic_contracts/contract_A_acme_msa_2026.md",
+    "description": "Planted-gap case: several clauses deliberately exceed the baseline. Mirrors the tech foundation doc's running scenario (24x7 / P1 / 15-min).",
+    "expected_findings": [
+      {
+        "clause_ref": "Section 5.2",
+        "category": "SLA response & resolution",
+        "gap": true,
+        "risk_level": "High",
+        "expected_baseline_match": "SOW_v1.md Section 4.1 (business-hours L2) + SLA_matrix.md P1 row (next business day)",
+        "reason": "New 24x7 + 15-minute P1 SLA not covered by baseline",
+        "critical_terms_expected": ["24x7", "P1", "within 15 minutes"]
+      },
+      {
+        "clause_ref": "Section 5.3",
+        "category": "Monitoring",
+        "gap": true,
+        "risk_level": "Medium",
+        "expected_baseline_match": "no baseline coverage found",
+        "reason": "SIEM-based monitoring not mentioned anywhere in baseline (policy_security.md explicitly says none is in place)",
+        "critical_terms_expected": ["SIEM", "monitoring"]
+      },
+      {
+        "clause_ref": "Section 7.1",
+        "category": "Data protection",
+        "gap": true,
+        "risk_level": "High",
+        "expected_baseline_match": "policy_security.md (primary region only)",
+        "reason": "New GDPR/EU data-residency requirement stricter than baseline's 'primary region only'",
+        "critical_terms_expected": ["GDPR", "data residency"]
+      },
+      {
+        "clause_ref": "Section 9.1",
+        "category": "Penalties",
+        "gap": true,
+        "risk_level": "Legal item",
+        "expected_baseline_match": "no baseline coverage found",
+        "reason": "New penalty/service-credit clause not present in baseline; always routes to legal regardless of confidence",
+        "critical_terms_expected": ["penalty", "service credit"]
+      }
+    ],
+    "expected_critical_miss_count": 0
+  },
+  "contract_B_clean_renewal": {
+    "file": "data/synthetic_contracts/contract_B_clean_renewal.md",
+    "description": "Control case: clauses match baseline near-verbatim. Used to measure false-positive rate.",
+    "expected_findings": [
+      { "clause_ref": "Section 4.1", "category": "Support hours", "gap": false, "risk_level": "None", "reason": "Matches baseline SOW_v1.md 4.1" },
+      { "clause_ref": "Section 4.2", "category": "Backup", "gap": false, "risk_level": "None", "reason": "Matches baseline SOW_v1.md 4.3" },
+      { "clause_ref": "Section 6.1", "category": "Reporting", "gap": false, "risk_level": "None", "reason": "Matches baseline SOW_v1.md 6.1" }
+    ],
+    "expected_critical_miss_count": 0,
+    "note": "None of these should be flagged as gaps. Any flag here counts toward the false-positive rate."
+  },
+  "contract_C_new_scope": {
+    "file": "data/synthetic_contracts/contract_C_new_scope.md",
+    "description": "No-baseline-coverage case: entirely new scope areas plus a resourcing constraint from skills_matrix.csv.",
+    "expected_findings": [
+      {
+        "clause_ref": "Section 3.1",
+        "category": "Disaster recovery",
+        "gap": true,
+        "risk_level": "High",
+        "expected_baseline_match": "no baseline coverage found",
+        "reason": "RTO/RPO commitments not present anywhere in baseline",
+        "critical_terms_expected": ["RTO", "RPO", "disaster recovery"]
+      },
+      {
+        "clause_ref": "Section 3.2",
+        "category": "Resource obligations",
+        "gap": true,
+        "risk_level": "High",
+        "expected_baseline_match": "no baseline coverage found; skills_matrix.csv shows 0 available Security Analyst / only 1 L3 engineer",
+        "reason": "Named/dedicated on-site resource requirement not covered by baseline or current resourcing capacity",
+        "critical_terms_expected": ["on-site support", "dedicated resource", "named resource"]
+      }
+    ],
+    "expected_critical_miss_count": 0
+  }
+}
