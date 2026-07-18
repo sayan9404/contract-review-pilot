@@ -776,6 +776,65 @@ session: it's a real, visible change to their live data that they should
 trigger deliberately, not something that happens silently as a side effect
 of a code fix.
 
+### Hosting: pivoted to Streamlit Community Cloud (free); code is ready, deploy is user-side (2026-07-18)
+
+User wanted to host cheaply on "my Azure". Investigated and hit a hard
+blocker: **the "Azure for Students" subscription (the only one this
+machine's `az login` can see) is spending-limit locked -- read-only.**
+`az webapp create` failed with `ReadOnlyDisabledSubscription`; `az account
+list` reports it "Enabled" but writes are blocked, which is the classic
+Azure-for-Students out-of-credit state (also why the existing
+`azragchatbot-app` on the B1 plan was `AdminDisabled`). The contract-review
+DATA services (Key Vault, the S0 Doc Intelligence, Search, OpenAI) are in a
+DIFFERENT, still-active subscription/tenant ("DEFAULT DIRECTORY") that this
+`az login` can't reach -- reachable only via their data-plane keys.
+
+Given the "less cost" priority and the dead Students sub, user chose
+**Streamlit Community Cloud (free)**. The app is fully portable -- it talks
+to the Azure data services over HTTPS with keys, so it doesn't matter that
+it's hosted off-Azure.
+
+**Code changes made to support hosting (all verified, backward-compatible):**
+- `shared/azure_clients.py::get_secret` now reads an env var first
+  (`storage-connection-string` -> `STORAGE_CONNECTION_STRING`, etc.) and
+  only falls back to Key Vault if unset. So a hosted app needs NO Key Vault
+  access and NO `az login`/managed identity -- just the 7 secret values as
+  env vars. Local dev sets none, so it still uses Key Vault via
+  DefaultAzureCredential exactly as before. Both paths unit-tested.
+- `app.py` bridges `st.secrets` -> `os.environ` at startup (guarded
+  try/except; a no-op locally where no secrets file exists). This is what
+  makes the env-var path work on Streamlit Cloud, whose secrets arrive via
+  `st.secrets`, with zero platform-specific code in the pipeline. Verified
+  end-to-end via AppTest (which loads `.streamlit/secrets.toml` the same way
+  Cloud does): secrets.toml -> bridge -> env -> get_secret -> live services
+  -> findings rendered. (Hit one transient `RemoteDisconnected` on a Search
+  call mid-test; retried clean -- network blip, not a code issue.)
+
+**Version control finally done** (open since Phase P0): `git init` on
+`main`, first commit `b75e93e`, 43 files. `.gitignore` extended to exclude
+`.streamlit/secrets.toml` (real keys), `reports/`, and `.claude/`/`.agents/`
+(local Claude tooling/skills -- were staged as symlink/gitlink entries,
+correctly excluded). `.streamlit/config.toml` (the theme) IS committed.
+
+**`.streamlit/secrets.toml` generated** (gitignored) holding the 7 real
+service secret values, read from Key Vault -- for pasting into the
+Streamlit Cloud secrets UI. Values were never printed to the transcript.
+
+**Remaining steps are user-side (cannot be automated from here):**
+`gh` CLI isn't installed and Streamlit Cloud deploy is a web UI, so:
+1. Create a GitHub repo (private is fine -- Community Cloud supports it),
+   then `git remote add origin <url>` + `git push -u origin main` (the push
+   triggers Git Credential Manager's browser login).
+2. On share.streamlit.io: sign in with GitHub, pick the repo, set main file
+   = `app.py`, paste the contents of `.streamlit/secrets.toml` into
+   Settings -> Secrets, deploy.
+
+**Cost/security note carried forward**: user chose PUBLIC / no-login. That
+leaves OpenAI + (now paid S0) Doc Intelligence quota open to anyone with the
+URL. The budget-alert to-do (open since P1) is the real backstop and still
+needs doing -- but it must be set in the ACTIVE subscription that holds the
+paid services (the "DEFAULT DIRECTORY" tenant), not the dead Students one.
+
 ### Residual-risk hardening + honest multi-run verification (2026-07-17)
 
 Friend made two good points on the chunking fix above: (1) the token-budget-fit
