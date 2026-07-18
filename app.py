@@ -16,6 +16,7 @@ import tempfile
 from pathlib import Path
 
 import streamlit as st
+from azure.core.exceptions import HttpResponseError
 
 # Hosted platforms (e.g. Streamlit Community Cloud) provide the service
 # secrets via st.secrets, not as environment variables. Mirror them into
@@ -144,7 +145,11 @@ def _promote_dialog(source_name: str, source_bytes: bytes, contract_name: str) -
             except TruncatedAnalysisError as exc:
                 st.error(f"Promotion stopped before touching the baseline: {exc}")
                 st.stop()
-            chunks = promote_to_baseline(doc, document_id=document_id, supersedes=supersedes)
+            try:
+                chunks = promote_to_baseline(doc, document_id=document_id, supersedes=supersedes)
+            except HttpResponseError as exc:
+                st.error(f"Azure Search rejected the promotion (HTTP {exc.status_code}): {exc.message}", icon=":material/error:")
+                st.stop()
         _cached_all_documents.clear()
         st.session_state["promotion_message"] = (
             f"Promoted '{source_name}' -- {len(chunks)} chunk(s) now active "
@@ -165,7 +170,11 @@ def _disable_dialog(document_id: str, version: int, source_doc: str) -> None:
     )
     if st.button("Confirm disable", type="primary", icon=":material/block:"):
         with st.spinner("Disabling..."):
-            count = supersede_document(document_id)
+            try:
+                count = supersede_document(document_id)
+            except HttpResponseError as exc:
+                st.error(f"Azure Search rejected the update (HTTP {exc.status_code}): {exc.message}", icon=":material/error:")
+                st.stop()
         _cached_all_documents.clear()
         st.session_state["promotion_message"] = f"Disabled '{document_id}' -- {count} chunk(s) retired."
         st.rerun()
@@ -190,7 +199,11 @@ def _enable_dialog(document_id: str, version: int, source_doc: str) -> None:
         )
     if st.button("Confirm enable", type="primary", icon=":material/check_circle:"):
         with st.spinner("Enabling..."):
-            count = activate_version(document_id, version)
+            try:
+                count = activate_version(document_id, version)
+            except HttpResponseError as exc:
+                st.error(f"Azure Search rejected the update (HTTP {exc.status_code}): {exc.message}", icon=":material/error:")
+                st.stop()
         _cached_all_documents.clear()
         st.session_state["promotion_message"] = f"Enabled '{document_id}' v{version} -- {count} chunk(s) now active."
         st.rerun()
