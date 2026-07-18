@@ -17,7 +17,13 @@ from typing import Optional
 
 from ingest.chunk import chunk_document
 from ingest.embed import embed_chunks
-from ingest.index import ensure_index, list_active_documents, push_chunks, supersede_document
+from ingest.index import (
+    ensure_index,
+    list_active_documents,
+    list_all_documents,
+    push_chunks,
+    supersede_document,
+)
 from ingest.parse import ParsedDocument
 from shared.schemas import BaselineChunk
 
@@ -50,7 +56,19 @@ def promote_to_baseline(
         supersede_document(supersedes)
     else:
         target_document_id = document_id
-        version = 1
+        # "New document" -- but the id may already have history if it was
+        # promoted before (e.g. promoted, disabled, then promoted again). If
+        # so, treat this as a fresh version rather than reusing version 1:
+        # reusing it would write new active chunks alongside the old ones
+        # under the same version, and any old chunk whose id doesn't collide
+        # (different chunking) would linger as a mixed-status orphan. Bump
+        # past the highest version ever used and supersede whatever is active.
+        history = [d for d in list_all_documents() if d["document_id"] == target_document_id]
+        if history:
+            version = max(d["version"] for d in history) + 1
+            supersede_document(target_document_id)
+        else:
+            version = 1
 
     chunks = chunk_document(doc)
     for chunk in chunks:

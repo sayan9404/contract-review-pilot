@@ -154,10 +154,20 @@ def list_all_documents() -> list[dict]:
         if not r["document_id"]:
             continue  # pre-versioning orphan rows from before this feature existed
         key = (r["document_id"], r["version"])
-        seen.setdefault(
-            key,
-            {"document_id": r["document_id"], "version": r["version"], "source_doc": r["source_doc"], "status": r["status"]},
-        )
+        entry = seen.get(key)
+        if entry is None:
+            seen[key] = {
+                "document_id": r["document_id"],
+                "version": r["version"],
+                "source_doc": r["source_doc"],
+                "status": r["status"],
+            }
+        elif r["status"] == "active":
+            # A (document_id, version) is active if ANY of its chunks is active.
+            # Chunks of one version can end up mixed-status if the same id was
+            # promoted twice with different chunking (orphan chunks lingered);
+            # retrieval uses the active ones, so the version reads as active.
+            entry["status"] = "active"
     return sorted(seen.values(), key=lambda d: (d["document_id"], d["version"]))
 
 
