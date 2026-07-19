@@ -1,7 +1,9 @@
 # Handoff / Progress Log
 
-Last updated: 2026-07-14, Phase P4 COMPLETE -- all P0-P4 phases of the pilot
-now built and passing their gates.
+Last updated: 2026-07-19 -- app is LIVE on Streamlit Community Cloud with a
+login gate; two baseline bugs found and fixed post-deploy. See the
+2026-07-19 sections near the end. For a clean, standalone setup runbook an
+L1 engineer can follow from zero, see `docs/SETUP_GUIDE.md`.
 
 **If you're picking this up in a new session/machine and the conversation
 history didn't carry over, read this file first — it's the source of truth
@@ -834,6 +836,78 @@ leaves OpenAI + (now paid S0) Doc Intelligence quota open to anyone with the
 URL. The budget-alert to-do (open since P1) is the real backstop and still
 needs doing -- but it must be set in the ACTIVE subscription that holds the
 paid services (the "DEFAULT DIRECTORY" tenant), not the dead Students one.
+
+### DEPLOYED LIVE + login gate + two post-deploy baseline bug fixes (2026-07-19)
+
+**The app is now live**: https://contract-review-pilot.streamlit.app ,
+deployed from GitHub repo `sayan9404/contract-review-pilot` (branch `main`,
+main file `app.py`). The user did the two user-side steps from the hosting
+section below (create GitHub repo + `git push`, then deploy on
+share.streamlit.io pasting `.streamlit/secrets.toml` into the Cloud Secrets
+box). Streamlit Cloud auto-redeploys on every push to `main`.
+
+**Login gate added** (`app.py::_require_login`): user asked for a
+username/password gate before deploy. Single shared credential, read from
+`APP_USERNAME`/`APP_PASSWORD` secrets (NOT hardcoded -- so the password
+stays out of the public GitHub repo; added to the gitignored
+`.streamlit/secrets.toml` and pasted into Cloud Secrets alongside the 7
+Azure keys). Constant-time compare via `hmac.compare_digest`; gate runs
+right after `set_page_config` and `st.stop()`s everything until authed;
+sign-out button clears the session. Current credentials: `admin` /
+`admin@9404`. Verified end-to-end via AppTest (blocks -> rejects wrong pw
+-> admits correct -> sign-out returns to gate). This is a "keep strangers
+out" gate, NOT real user management -- the budget alert (still open) is the
+real backstop for the public/no-login-quota exposure.
+
+**Azure error surfacing** (`app.py`): Streamlit Cloud redacts uncaught
+exceptions, so a failed baseline write showed only a generic
+`HttpResponseError` with no detail. The three write dialogs
+(disable/enable/promote) now catch `HttpResponseError` and `st.error` the
+real HTTP status + message, so Azure failures are legible in-app instead of
+a redacted crash.
+
+**Bug 1 (reported as "disable throws HttpResponseError on Cloud")**: turned
+out to self-resolve -- verified the `SEARCH_KEY` in secrets IS the admin
+key (matches Key Vault exactly) and reproduced the exact disable write
+(read 43 active chunks, write them back) from a local machine: it
+succeeded. Key/SDK/data all fine; the earlier transient error didn't recur.
+Error surfacing (above) shipped anyway so any future Azure error is visible.
+
+**Bug 2 (reported as "Add to baseline confirms, but sidebar still shows no
+active baseline") -- REAL, two-part bug, fixed**:
+- Root cause in the data: promoting the SAME `document_id` twice (promote ->
+  disable -> promote again) left one `(document_id, version)` with MIXED
+  statuses -- 27 active chunks + 16 stale superseded ones. Because the
+  chunking had changed between the two promotes, the old chunks had
+  different `chunk_id`s and weren't overwritten, so they lingered as
+  orphans under the same version.
+- Display bug (`ingest/index.py::list_all_documents`): it collapsed each
+  `(document_id, version)` to one row via `setdefault`, reporting whichever
+  chunk it happened to read first. With mixed statuses it read a superseded
+  one first and labeled the whole doc "superseded" -> sidebar's active-only
+  filter hid it -> "No active baseline documents yet", even though 27 chunks
+  were genuinely active and in use by retrieval. **Fix**: a
+  `(document_id, version)` now reads as `active` if ANY of its chunks is
+  active (matches what the `status eq 'active'` retrieval filter actually
+  uses). Verified against the live index: the Azure agreement now correctly
+  returns active.
+- Prevention (`ingest/promote.py`): the "new document" path always used
+  `version=1` and never cleaned up, which is what allowed the orphan mix. It
+  now checks `list_all_documents()` for prior history on that `document_id`
+  and, if found, bumps to `max(existing version)+1` and supersedes the prior
+  active set -- so chunk IDs never collide across promote generations again.
+- **Known residual data state (not code)**: the existing `(azure_..., v1)`
+  still has those 16 orphan superseded chunks mixed in. Harmless now
+  (excluded from retrieval; sidebar reads correctly). The only way they'd
+  resurface is a manual Enable of that old v1. Offered to delete just those
+  16 orphan chunks to make the version perfectly clean -- pending user's
+  yes/no. Cleanest long-term recovery is a re-promote (now goes to a clean
+  v2 thanks to the prevention fix above).
+
+Commits this session (on top of the initial `b75e93e`): login gate, HANDOFF
+update, error surfacing, and the baseline display+promote fix; plus a
+`5385d49 Added Dev Container Folder` commit the user added via GitHub
+(rebased on cleanly).
 
 ### Residual-risk hardening + honest multi-run verification (2026-07-17)
 
